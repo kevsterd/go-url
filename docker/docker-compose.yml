@@ -1,0 +1,35 @@
+version: '3'
+
+volumes: 
+  goapp-db:
+
+services:
+  app:
+    container_name: goapp
+    image: alexbrazier/go-url:latest
+    build: .
+    ports:
+      - 80:1323
+    depends_on:
+      - postgres
+    environment:
+      - POSTGRES_ADDR=postgres:5432
+      - POSTGRES_PASS=password
+      - POSTGRES_USER=postgres
+      - POSTGRES_DATABASE=go
+      - HOSTS=go,localhost
+      - APP_URI=http://localhost:8080
+      - DEBUG=false
+    restart: on-failure
+  postgres:
+    container_name: postgres
+    image: postgres:16.3
+    #               11.1
+    environment:
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_USER=postgres
+      - POSTGRES_DB=go
+    volumes:
+      - goapp-db:/var/lib/postgresql/data
+    ports:
+      - 5432:5432

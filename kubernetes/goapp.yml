@@ -1,0 +1,163 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: goapp
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: goapp-postgres-secret
+  namespace: goapp
+type: Opaque
+stringData:
+  db: go
+  username: postgres
+  password: password
+---
+#Storage for Postgres
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: goapp-db
+  namespace: goapp
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+status: {}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    io.kompose.service: postgres
+  name: postgres
+  namespace: goapp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      io.kompose.service: postgres
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        io.kompose.network/go-stack-default: "true"
+        io.kompose.service: postgres
+    spec:
+      containers:
+        - env:
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  name: goapp-postgres-secret
+                  key: db
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: goapp-postgres-secret
+                  key: password
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: goapp-postgres-secret
+                  key: username
+          image: postgres:16.3
+          name: postgres
+          ports:
+            - containerPort: 5432
+              hostPort: 5432
+              protocol: TCP
+          resources: {}
+          volumeMounts:
+            - mountPath: /var/lib/postgresql/data
+              name: goapp-db  #PVC mapped
+      restartPolicy: Always
+      volumes:
+        - name: goapp-db
+          persistentVolumeClaim:
+            claimName: goapp-db
+status: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    io.kompose.service: postgres
+  name: postgres
+  namespace: goapp
+spec:
+  ports:
+    - name: "5432"
+      port: 5432
+      targetPort: 5432
+  selector:
+    io.kompose.service: postgres
+status:
+  loadBalancer: {}
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    io.kompose.network/go-stack-default: "true"
+    io.kompose.service: goapp
+  name: goapp
+  namespace: goapp
+spec:
+  containers:
+    - env:
+        - name: APP_URI
+          value: http://localhost:8080
+        - name: DEBUG
+          value: "false"
+        - name: HOSTS
+          value: go,localhost
+        - name: POSTGRES_ADDR
+          value: postgres:5432
+        - name: POSTGRES_DATABASE
+          valueFrom:
+            secretKeyRef:
+              name: goapp-postgres-secret
+              key: db
+        - name: POSTGRES_PASS
+          valueFrom:
+            secretKeyRef:
+              name: goapp-postgres-secret
+              key: password
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: goapp-postgres-secret
+              key: username
+      image: alexbrazier/go-url:latest
+      name: goapp
+      ports:
+        - containerPort: 1323
+          hostPort: 8080
+          protocol: TCP
+      resources: {}
+  restartPolicy: OnFailure
+status: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    io.kompose.service: goapp
+  name: goapp
+  namespace: goapp
+spec:
+  ports:
+    - name: "8080"
+      port: 8080
+      targetPort: 1323
+  selector:
+    io.kompose.service: goapp
+status:
+  loadBalancer: {}
+---
